@@ -1,19 +1,30 @@
-@group(0) @binding(0) var<uniform> grid: vec2f; // New line
+@binding(0) @group(0) var<storage, read> size: vec2<u32>;
+@binding(1) @group(0) var<storage, read> current: array<u32>;
+@binding(2) @group(0) var<storage, read_write> next: array<u32>;
 
-// New lines
-@group(0) @binding(1) var<storage> cellStateIn: array<u32>;
-@group(0) @binding(2) var<storage, read_write> cellStateOut: array<u32>;
+override blockSize = 8;
 
-fn cellIndex(cell: vec2u) -> u32 {
-  return cell.y * u32(grid.x) + cell.x;
+fn getIndex(x: u32, y: u32) -> u32 {
+  let h = size.y;
+  let w = size.x;
+
+  return (y % h) * w + (x % w);
 }
 
-@compute @workgroup_size(${WORKGROUP_SIZE}, ${WORKGROUP_SIZE})
-fn main(@builtin(global_invocation_id) cell: vec3u) {
-    // New lines. Flip the cell state every step.
-  if (cellStateIn[cellIndex(cell.xy)] == 1) {
-    cellStateOut[cellIndex(cell.xy)] = 0;
-  } else {
-    cellStateOut[cellIndex(cell.xy)] = 1;
-  }
+fn getCell(x: u32, y: u32) -> u32 {
+  return current[getIndex(x, y)];
 }
+
+fn countNeighbors(x: u32, y: u32) -> u32 {
+  return getCell(x - 1, y - 1) + getCell(x, y - 1) + getCell(x + 1, y - 1) + 
+         getCell(x - 1, y) +                         getCell(x + 1, y) + 
+         getCell(x - 1, y + 1) + getCell(x, y + 1) + getCell(x + 1, y + 1);
+}
+
+@compute @workgroup_size(blockSize, blockSize)
+fn main(@builtin(global_invocation_id) grid: vec3<u32>) {
+  let x = grid.x;
+  let y = grid.y;
+  let n = countNeighbors(x, y);
+  next[getIndex(x, y)] = select(u32(n == 3u), u32(n == 2u || n == 3u), getCell(x, y) == 1u); 
+} 

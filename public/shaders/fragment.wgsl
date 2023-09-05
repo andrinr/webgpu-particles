@@ -1,10 +1,4 @@
-struct FragInput {
-  @location(0) cell: vec2f,
-};
-
-@group(0) @binding(0) var<uniform> grid: vec2f;
-
 @fragment
-fn main(input: FragInput) -> @location(0) vec4f {
-    return vec4f(input.cell/grid, 1.0, 1);
+fn main(@location(0) cell: f32) -> @location(0) vec4<f32> {
+  return vec4<f32>(cell, cell, cell, 1.);
 }
