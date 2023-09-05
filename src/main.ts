@@ -177,9 +177,9 @@ function update() {
     
     pass.end();
     
-    const commandBuffer : GPUCommandBuffer = encoder.finish();
+    // const commandBuffer : GPUCommandBuffer = encoder.finish();
     
-    device.queue.submit([commandBuffer]);
+    // device.queue.submit([commandBuffer]);
     device.queue.submit([encoder.finish()]);
 }
 

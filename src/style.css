@@ -1,3 +1,18 @@
 body {
   background-color: black;
+  color: white
+}
+
+a {
+  color: white;
+  text-decoration: none;
+}
+
+a:visited {
+  color: wite;
+}
+
+canvas {
+  padding: 20px;
+  border: dotted 1px white;
 }
