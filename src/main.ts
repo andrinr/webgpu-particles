@@ -1,6 +1,8 @@
 import './style.css'
 
 const GRID_SIZE : number = 32;
+const UPDATE_INTERVAL = 200; // Update every 200ms (5 times/sec)
+let step = 0; // Track how many simulation steps have been run
 
 const canvas : HTMLCanvasElement | null = document.querySelector("canvas");
 
@@ -20,10 +22,7 @@ if (!adapter) {
 
 const device : GPUDevice = await adapter.requestDevice();
 
-const context : GPUCanvasContext | null = canvas.getContext("webgpu");
-if (!context) {
-    throw new Error("WebGPU not supported on this browser.");
-}
+const context : GPUCanvasContext = canvas.getContext("webgpu") as GPUCanvasContext;
 
 const canvasFormat : GPUTextureFormat = navigator.gpu.getPreferredCanvasFormat();
 context.configure({
@@ -39,6 +38,35 @@ const uniformBuffer : GPUBuffer = device.createBuffer({
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 });
 device.queue.writeBuffer(uniformBuffer, 0, uniformArray);
+
+// Create an array representing the active state of each cell.
+const cellStateArray  : Uint32Array = new Uint32Array(GRID_SIZE * GRID_SIZE);
+// Create a storage buffer to hold the cell state.
+const cellStateStorage : GPUBuffer[] = [
+    device.createBuffer({
+        label: "Cell State A",
+        size: cellStateArray.byteLength,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    }),
+    device.createBuffer({
+        label: "Cell State B",
+        size: cellStateArray.byteLength,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    })
+];
+
+// Mark every third cell of the first grid as active.
+for (let i = 0; i < cellStateArray.length; i+=3) {
+    cellStateArray[i] = 1;
+}
+device.queue.writeBuffer(cellStateStorage[0], 0, cellStateArray);
+  
+// Mark every other cell of the second grid as active.
+for (let i = 0; i < cellStateArray.length; i++) {
+    cellStateArray[i] = i % 2;
+}
+
+device.queue.writeBuffer(cellStateStorage[1], 0, cellStateArray);
 
 const vertices : Float32Array = new Float32Array([
     //   X,    Y,
@@ -68,76 +96,91 @@ const vertexBufferLayout : GPUVertexBufferLayout = {
     stepMode : "vertex",
 };
 
-const cellShaderModule : GPUShaderModule = device.createShaderModule({
-    label: "Cell shader",
-    code: `
-    @group(0) @binding(0) var<uniform> grid: vec2f;
+const vertexCodeResponse = await fetch("/shaders/vertex.wgsl");
+const vertexShaderString = await vertexCodeResponse.text();
 
-    @vertex
-    fn vertex_main(@location(0) pos: vec2f,
-        @builtin(instance_index) instance: u32) ->
-        @builtin(position) vec4f {
+const vertexShaderModule : GPUShaderModule = device.createShaderModule({
+    label: "Vertex shader",
+    code: vertexShaderString,
+});
 
-        let i = f32(instance);
-        let cell = vec2f(i % grid.x , floor(i / grid.x));
-        let cellOffset = cell / grid * 2;
-        let gridPos = (pos + 1) / grid - 1 + cellOffset;
-        return vec4f(gridPos, 0, 1);
-    }
+const fragmentCodeResponse = await fetch("/shaders/fragment.wgsl");
+const fragmentShaderString = await fragmentCodeResponse.text();
 
-    @fragment
-    fn fragment_main() -> @location(0) vec4f {
-        return vec4f(1, 0, 0, 1);
-    }
-    `
+const fragmentShaderModule : GPUShaderModule = device.createShaderModule({
+    label: "Fragment shader",
+    code: fragmentShaderString,
 });
 
 const cellPipeline : GPURenderPipeline = device.createRenderPipeline({
     label: "Cell pipeline",
     layout: "auto",
     vertex: {
-        module: cellShaderModule,
-        entryPoint: "vertex_main",
+        module: vertexShaderModule,
+        entryPoint: "main",
         buffers: [vertexBufferLayout]
     },
     fragment: {
-        module: cellShaderModule,
-        entryPoint: "fragment_main", 
+        module: fragmentShaderModule,
+        entryPoint: "main", 
         targets: [{
             format: canvasFormat
         }]
     }
 });
 
-const bindGroup : GPUBindGroup = device.createBindGroup({
-    label: "Cell renderer bind group",
-    layout: cellPipeline.getBindGroupLayout(0),
-    entries: [{
-        binding: 0,
-        resource: { buffer: uniformBuffer }
-    }],
-});
+const bindGroups : GPUBindGroup[] = [
+    device.createBindGroup({
+        label: "Cell renderer bind group",
+        layout: cellPipeline.getBindGroupLayout(0),
+        entries: [{
+            binding: 0,
+            resource: { buffer: uniformBuffer }
+        },
+        {
+            binding: 1,
+            resource: { buffer: cellStateStorage[0] }
+        }],
+    }),
+    device.createBindGroup({
+        label: "Cell renderer bind group",
+        layout: cellPipeline.getBindGroupLayout(0),
+        entries: [{
+            binding: 0,
+            resource: { buffer: uniformBuffer }
+        },
+        {
+            binding: 1,
+            resource: { buffer: cellStateStorage[1] }
+        }],
+    }),
+];
 
-const encoder : GPUCommandEncoder = device.createCommandEncoder();
+function update() {
+    step++;
 
-const pass : GPURenderPassEncoder = encoder.beginRenderPass({
-    colorAttachments: [{
-        view: context.getCurrentTexture().createView(),
-        loadOp: "clear",
-        clearValue : [0.5, 0.0, 1.0, 1.0],
-        storeOp: "store",
-    }]
-});
+    const encoder : GPUCommandEncoder = device.createCommandEncoder();
 
-pass.setPipeline(cellPipeline);
-pass.setVertexBuffer(0, vertexBuffer);
-pass.setBindGroup(0, bindGroup); // New line!
-pass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE); // 6 vertices
+    const pass : GPURenderPassEncoder = encoder.beginRenderPass({
+        colorAttachments: [{
+            view: context.getCurrentTexture().createView(),
+            loadOp: "clear",
+            clearValue : [0.0, 0.0, 0.0, 1.0],
+            storeOp: "store",
+        }]
+    });
+    
+    pass.setPipeline(cellPipeline);
+    pass.setVertexBuffer(0, vertexBuffer);
+    pass.setBindGroup(0, bindGroups[step % 2]); // New line!
+    pass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE); // 6 vertices
+    
+    pass.end();
+    
+    const commandBuffer : GPUCommandBuffer = encoder.finish();
+    
+    device.queue.submit([commandBuffer]);
+    device.queue.submit([encoder.finish()]);
+}
 
-pass.end();
-
-const commandBuffer : GPUCommandBuffer = encoder.finish();
-
-device.queue.submit([commandBuffer]);
-
-device.queue.submit([encoder.finish()]);
+setInterval(update, UPDATE_INTERVAL);
