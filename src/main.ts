@@ -28,53 +28,65 @@ canvasContext.configure({
 });
 
 // Initialize data on host
-const uniformArray : Float32Array = new Float32Array([GRID_SIZE, GRID_SIZE]);
+const uniformSize : Float32Array = new Float32Array([GRID_SIZE, GRID_SIZE]);
 
+const uniformDt : Float32Array = new Float32Array([UPDATE_INTERVAL / 1000.0]);
+
+const s : number = 1.0;
 const vertices : Float32Array = new Float32Array([
-    -0.8, -0.8, // Triangle 1
-    0.8, -0.8,
-    0.8,  0.8,
-    -0.8, -0.8, // Triangle 2
-    0.8,  0.8,
-    -0.8,  0.8,
+    -s, -s, // Triangle 1
+    s, -s,
+    s,  s,
+    -s, -s, // Triangle 2
+    s,  s,
+    -s,  s,
 ]);
 
-const cellStateArray  : Uint32Array = new Uint32Array(GRID_SIZE * GRID_SIZE);
-for (let i = 0; i < cellStateArray.length; ++i) {
-    cellStateArray[i] = Math.random() > 0.6 ? 1 : 0;
+const particleStateArray : Float32Array = new Float32Array(GRID_SIZE * GRID_SIZE * 4);
+for (let i = 0; i < particleStateArray.length; i += 4) {
+    particleStateArray[i] = Math.random() * 2 - 1; // x
+    particleStateArray[i + 1] = Math.random() * 2 - 1; // y
+    particleStateArray[i + 2] = Math.random() * 0.01 - 0.005; // vx
+    particleStateArray[i + 3] = Math.random() * 0.01 - 0.005; // vy
 }
 
 // Create Buffers
-const uniformBuffer : GPUBuffer = device.createBuffer({
-    label: "Grid Uniforms",
-    size: uniformArray.byteLength,
+const sizeBuffer : GPUBuffer = device.createBuffer({
+    label: "Size Uniform",
+    size: uniformSize.byteLength,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+});
+
+const dtBuffer : GPUBuffer = device.createBuffer({
+    label: "Dt Uniform",
+    size: uniformDt.byteLength,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 });
 
 const vertexBuffer : GPUBuffer = device.createBuffer({
-    label: "Cell vertices",
+    label: "Vertices",
     size: vertices.byteLength,
     usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
 });
 
-const cellStateBuffers : GPUBuffer[] = [
+const particleStateBuffers : GPUBuffer[] = [
     device.createBuffer({
-        label: "Cell State A",
-        size: cellStateArray.byteLength,
+        label: "Particle State A",
+        size: particleStateArray.byteLength,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     }),
     device.createBuffer({
-        label: "Cell State B",
-        size: cellStateArray.byteLength,
+        label: "Particle State B",
+        size: particleStateArray.byteLength,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     })
 ];
 
 // Copy data from host to device
-device.queue.writeBuffer(uniformBuffer, 0, uniformArray);
+device.queue.writeBuffer(sizeBuffer, 0, uniformSize);
 device.queue.writeBuffer(vertexBuffer, 0, vertices);
-device.queue.writeBuffer(cellStateBuffers[0], 0, cellStateArray);
-device.queue.writeBuffer(cellStateBuffers[1], 0, cellStateArray);
+device.queue.writeBuffer(particleStateBuffers[0], 0, particleStateArray);
+device.queue.writeBuffer(particleStateBuffers[1], 0, particleStateArray);
 
 // Define vertex buffer layout
 const vertexBufferLayout : GPUVertexBufferLayout = {
@@ -95,7 +107,7 @@ const fragmentShaderModule : GPUShaderModule =
     await loadCreateShaderModule(device, "/shaders/fragment.wgsl", "Fragment shader");
 
 const computeShaderModule : GPUShaderModule = 
-    await loadCreateShaderModule(device, "/shaders/compute.wgsl", "Simulation shader");
+    await loadCreateShaderModule(device, "/shaders/compute.wgsl", "Compute shader");
 
 // Bind group layouts, can be used for both pipelines
 const bindGroupLayout : GPUBindGroupLayout = device.createBindGroupLayout({
@@ -105,13 +117,17 @@ const bindGroupLayout : GPUBindGroupLayout = device.createBindGroupLayout({
         visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE,
         buffer: { type : "uniform"} // Grid uniform buffer
       }, {
-        binding: 1,
+        binding: 1, 
         visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage"} // Cell state input buffer
+        buffer: { type: "uniform"} // Dt uniform buffer
       }, {
         binding: 2,
+        visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE,
+        buffer: { type: "read-only-storage"} // Particle state input buffer
+      }, {
+        binding: 3,
         visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "storage"} // Cell state output buffer
+        buffer: { type: "storage"} // Particle state output buffer
       }]
 });
 
@@ -122,13 +138,16 @@ const bindGroups : GPUBindGroup[] = [
         layout: bindGroupLayout,
         entries: [{
             binding: 0,
-            resource: { buffer: uniformBuffer }
+            resource: { buffer: sizeBuffer }
         }, {
             binding: 1,
-            resource: { buffer: cellStateBuffers[0] }
+            resource: { buffer: dtBuffer }
         }, {
             binding: 2,
-            resource: { buffer: cellStateBuffers[1] }
+            resource: { buffer: particleStateBuffers[0] }
+        }, {
+            binding: 3,
+            resource: { buffer: particleStateBuffers[1] }
         }],
       }),
     device.createBindGroup({
@@ -136,13 +155,16 @@ const bindGroups : GPUBindGroup[] = [
         layout: bindGroupLayout,
         entries: [{
             binding: 0,
-            resource: { buffer: uniformBuffer }
+            resource: { buffer: sizeBuffer }
         }, {
             binding: 1,
-            resource: { buffer: cellStateBuffers[1] }
+            resource: { buffer: dtBuffer }
         }, {
             binding: 2,
-            resource: { buffer: cellStateBuffers[0] }
+            resource: { buffer: particleStateBuffers[1] }
+        }, {
+            binding: 3,
+            resource: { buffer: particleStateBuffers[0] }
         }],
     })
 ]

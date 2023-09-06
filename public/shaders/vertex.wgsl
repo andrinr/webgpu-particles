@@ -5,27 +5,24 @@ struct VertexInput {
 
 struct VertexOutput {
   @builtin(position) pos: vec4f,
-  @location(0) cell: vec2f, // New line!
+  @location(0) cell: vec2f,
 };
 
 @group(0) @binding(0) var<uniform> grid: vec2f;
-@group(0) @binding(1) var<storage> cellState: array<u32>; // New!
+@group(0) @binding(1) var<uniform> dt: f32;
+@group(0) @binding(2) var<storage> particleState: array<f32>;
 
 @vertex
 fn main(
   @location(0) pos: vec2f,
   @builtin(instance_index) instance: u32) -> VertexOutput {
-    
-  let i = f32(instance);
-  let cell = vec2f(i % grid.x, floor(i / grid.x));
-  let state = f32(cellState[instance]); // New line!
 
-  let cellOffset = cell / grid * 2;
-  // New: Scale the position by the cell's active state.
-  let gridPos = (pos*state+1) / grid - 1 + cellOffset;
+  let state_pos = vec2f(
+    particleState[instance * 4 + 0],
+    particleState[instance * 4 + 1]);
 
   var output: VertexOutput;
-  output.pos = vec4f(gridPos, 0, 1);
-  output.cell = cell;
+  output.pos = vec4f(state_pos, 0, 1);
+  output.cell = vec2f(1.0, 1.0);
   return output;
 }
