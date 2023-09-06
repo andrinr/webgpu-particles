@@ -2,8 +2,8 @@ import './style.css'
 import { loadCreateShaderModule } from './wgpu/shader';
 
 const WORKGROUP_SIZE : number = 8;
-const GRID_SIZE : number = 32;
-const UPDATE_INTERVAL = 200;
+const GRID_SIZE : number = 128;
+const UPDATE_INTERVAL = 50;
 let step = 0; // Track how many simulation steps have been run
 
 const canvas : HTMLCanvasElement | null = document.querySelector("canvas");
