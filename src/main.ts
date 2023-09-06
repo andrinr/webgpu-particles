@@ -74,6 +74,7 @@ const cellStateBuffers : GPUBuffer[] = [
 device.queue.writeBuffer(uniformBuffer, 0, uniformArray);
 device.queue.writeBuffer(vertexBuffer, 0, vertices);
 device.queue.writeBuffer(cellStateBuffers[0], 0, cellStateArray);
+device.queue.writeBuffer(cellStateBuffers[1], 0, cellStateArray);
 
 // Define vertex buffer layout
 const vertexBufferLayout : GPUVertexBufferLayout = {
@@ -102,7 +103,7 @@ const bindGroupLayout : GPUBindGroupLayout = device.createBindGroupLayout({
     entries: [{
         binding: 0,
         visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE,
-        buffer: {} // Grid uniform buffer
+        buffer: { type : "uniform"} // Grid uniform buffer
       }, {
         binding: 1,
         visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE,
@@ -113,6 +114,38 @@ const bindGroupLayout : GPUBindGroupLayout = device.createBindGroupLayout({
         buffer: { type: "storage"} // Cell state output buffer
       }]
 });
+
+// Bind groups: Connect buffer to shader, can be used for both pipelines
+const bindGroups : GPUBindGroup[] = [
+    device.createBindGroup({
+        label: "Renderer bind group A",
+        layout: bindGroupLayout,
+        entries: [{
+            binding: 0,
+            resource: { buffer: uniformBuffer }
+        }, {
+            binding: 1,
+            resource: { buffer: cellStateBuffers[0] }
+        }, {
+            binding: 2,
+            resource: { buffer: cellStateBuffers[1] }
+        }],
+      }),
+    device.createBindGroup({
+        label: "Renderer bind group B",
+        layout: bindGroupLayout,
+        entries: [{
+            binding: 0,
+            resource: { buffer: uniformBuffer }
+        }, {
+            binding: 1,
+            resource: { buffer: cellStateBuffers[1] }
+        }, {
+            binding: 2,
+            resource: { buffer: cellStateBuffers[0] }
+        }],
+    })
+]
 
 // Pipeline layouts, can be used for both pipelines
 const pipelineLayout : GPUPipelineLayout = device.createPipelineLayout({
@@ -147,78 +180,17 @@ const computePipeline = device.createComputePipeline({
     }
 });
 
-// Bind groups: Connect buffer to shader
-const rendererBindGroups : GPUBindGroup[] = [
-    device.createBindGroup({
-        label: "Renderer bind group A",
-        layout: bindGroupLayout,
-        entries: [{
-          binding: 0,
-          resource: { buffer: uniformBuffer }
-        }, {
-          binding: 1,
-          resource: { buffer: cellStateBuffers[0] }
-        }],
-      }),
-    device.createBindGroup({
-        label: "Renderer bind group B",
-        layout: bindGroupLayout,
-        entries: [{
-            binding: 0,
-            resource: { buffer: uniformBuffer }
-        }, {
-            binding: 1,
-            resource: { buffer: cellStateBuffers[1] }
-        }],
-    })
-]
-
-const computeBindGroups : GPUBindGroup[] = [
-    device.createBindGroup({
-        label: "Compute bind group A",
-        layout: bindGroupLayout,
-        entries: [
-        {
-            binding: 0,
-            resource: { buffer: uniformBuffer }
-        },
-        {
-            binding: 1,
-            resource: { buffer: cellStateBuffers[0] }
-        },
-        {
-            binding: 2,
-            resource: { buffer: cellStateBuffers[1] }
-        }],
-    }),
-    device.createBindGroup({
-        label: "Compute bind group B",
-        layout: bindGroupLayout,
-        entries: [
-        {
-            binding: 0,
-            resource: { buffer: uniformBuffer }
-        },
-        {
-            binding: 1,
-            resource: { buffer: cellStateBuffers[1] }
-        },
-        {
-            binding: 2,
-            resource: { buffer: cellStateBuffers[0] }
-        }],
-    })
-];
-
 function update() : void {
     step++;
+
+    console.log("Step " + step);
 
     const encoder : GPUCommandEncoder = device.createCommandEncoder();
 
     const computePass = encoder.beginComputePass();
 
     computePass.setPipeline(computePipeline);
-    computePass.setBindGroup(0, computeBindGroups[step % 2]);
+    computePass.setBindGroup(0, bindGroups[step % 2]);
 
     const workgroupCount = Math.ceil(GRID_SIZE / WORKGROUP_SIZE);
     computePass.dispatchWorkgroups(workgroupCount, workgroupCount);
@@ -236,7 +208,7 @@ function update() : void {
     
     renderPass.setPipeline(renderPipeline);
     renderPass.setVertexBuffer(0, vertexBuffer);
-    renderPass.setBindGroup(0, rendererBindGroups[step % 2]); // New line!
+    renderPass.setBindGroup(0, bindGroups[step % 2]); // New line!
     renderPass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE); // 6 vertices
     
     renderPass.end();
