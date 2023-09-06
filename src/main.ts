@@ -2,8 +2,8 @@ import './style.css'
 import { loadCreateShaderModule } from './wgpu/shader';
 
 const WORKGROUP_SIZE : number = 8;
-const GRID_SIZE : number = 32;
-const UPDATE_INTERVAL = 200;
+const GRID_SIZE : number = 512;
+const UPDATE_INTERVAL = 30;
 let step = 0; // Track how many simulation steps have been run
 
 const canvas : HTMLCanvasElement | null = document.querySelector("canvas");
@@ -46,8 +46,8 @@ const particleStateArray : Float32Array = new Float32Array(GRID_SIZE * GRID_SIZE
 for (let i = 0; i < particleStateArray.length; i += 4) {
     particleStateArray[i] = Math.random() * 2 - 1; // x
     particleStateArray[i + 1] = Math.random() * 2 - 1; // y
-    particleStateArray[i + 2] = Math.random() * 0.01 - 0.005; // vx
-    particleStateArray[i + 3] = Math.random() * 0.01 - 0.005; // vy
+    particleStateArray[i + 2] = Math.random() * 0.1 - 0.05; // vx
+    particleStateArray[i + 3] = Math.random() * 0.1 - 0.05; // vy
 }
 
 // Create Buffers
@@ -84,6 +84,7 @@ const particleStateBuffers : GPUBuffer[] = [
 
 // Copy data from host to device
 device.queue.writeBuffer(sizeBuffer, 0, uniformSize);
+device.queue.writeBuffer(dtBuffer, 0, uniformDt);
 device.queue.writeBuffer(vertexBuffer, 0, vertices);
 device.queue.writeBuffer(particleStateBuffers[0], 0, particleStateArray);
 device.queue.writeBuffer(particleStateBuffers[1], 0, particleStateArray);

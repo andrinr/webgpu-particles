@@ -1,10 +1,10 @@
 @group(0) @binding(0) var<uniform> grid: vec2f;
 @group(0) @binding(1) var<uniform> dt: f32;
-@group(0) @binding(2) var<storage> particeStateIn: array<f32>;
-@group(0) @binding(3) var<storage, read_write> particleStateOut: array<f32>;
+@group(0) @binding(2) var<storage> particleStateIn: array<vec4f>;
+@group(0) @binding(3) var<storage, read_write> particleStateOut: array<vec4f>;
 
 fn particleIndex(id: vec2u) -> u32 {
-  return (id.y % u32(id.y)) * u32(id.x) + (id.x % u32(id.x)) * 4;
+  return (id.y % u32(grid.y)) * u32(grid.x) + (id.x % u32(grid.x));
 }
 
 fn kick_drift_kick(pos: vec2f, vel: vec2f, acc: vec2f) -> vec4f {
@@ -15,20 +15,22 @@ fn kick_drift_kick(pos: vec2f, vel: vec2f, acc: vec2f) -> vec4f {
   return vec4f(pos_full, vel_full);
 }
 
+fn force(pos: vec2f, body: vec2f) -> vec2f {
+  let r = pos - body;
+  let d = length(r) + 0.001;
+  return -r * (1.0 / (d * d));
+}
+
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) id: vec3u) {
-  // Determine how many active neighbors this cell has.
-  
+ 
   let i = particleIndex(id.xy);
-  let pos = vec2(particeStateIn[i], particeStateIn[i + 1]);
-  let vel = vec2(particeStateIn[i + 2], particeStateIn[i + 3]);
+  let particle_pos = particleStateIn[i].xy;
+  let particle_vel = particleStateIn[i].zw;
 
-  let acc = vec2(0.0, 0.0);
+  let particle_acc = force(particle_pos, vec2f(0., 0.)) * 0.004;
 
-  let new_state = kick_drift_kick(pos, vel, acc);
+  let new_state = kick_drift_kick(particle_pos, particle_vel, particle_acc);
 
-  particleStateOut[i] = new_state.x;
-  particleStateOut[i + 1] = new_state.y;
-  particleStateOut[i + 2] = new_state.z;
-  particleStateOut[i + 3] = new_state.w;
+  particleStateOut[i] = new_state;
 }

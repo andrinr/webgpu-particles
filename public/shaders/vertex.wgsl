@@ -5,24 +5,25 @@ struct VertexInput {
 
 struct VertexOutput {
   @builtin(position) pos: vec4f,
-  @location(0) cell: vec2f,
+  @location(0) vel: vec2f,
 };
 
 @group(0) @binding(0) var<uniform> grid: vec2f;
 @group(0) @binding(1) var<uniform> dt: f32;
-@group(0) @binding(2) var<storage> particleState: array<f32>;
+@group(0) @binding(2) var<storage> particleState: array<vec4f>;
 
 @vertex
 fn main(
-  @location(0) pos: vec2f,
+  @location(0) vertex_pos: vec2f,
   @builtin(instance_index) instance: u32) -> VertexOutput {
 
-  let state_pos = vec2f(
-    particleState[instance * 4 + 0],
-    particleState[instance * 4 + 1]);
+  let particle_pos = particleState[instance].xy;
+  let particle_vel = particleState[instance].zw;
+
+  let pos = particle_pos + vertex_pos * 0.003;
 
   var output: VertexOutput;
-  output.pos = vec4f(state_pos, 0, 1);
-  output.cell = vec2f(1.0, 1.0);
+  output.pos = vec4f(pos, 0, 1);
+  output.vel = particle_vel;
   return output;
 }
