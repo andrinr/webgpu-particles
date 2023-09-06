@@ -4,5 +4,5 @@ struct FragInput {
 
 @fragment
 fn main(input: FragInput) -> @location(0) vec4f {
-  return vec4f(normalize(input.vel) * 100.0, 1.0, 1.0);
+  return vec4f(abs(input.vel) * 10.0, 1.0, 1.0);
 }

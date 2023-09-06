@@ -44,8 +44,8 @@ const vertices : Float32Array = new Float32Array([
 
 const particleStateArray : Float32Array = new Float32Array(GRID_SIZE * GRID_SIZE * 4);
 for (let i = 0; i < particleStateArray.length; i += 4) {
-    particleStateArray[i] = Math.random() * 2 - 1; // x
-    particleStateArray[i + 1] = Math.random() * 2 - 1; // y
+    particleStateArray[i] = i / 4 % GRID_SIZE / GRID_SIZE; // x
+    particleStateArray[i + 1] = Math.floor(i / 4 / GRID_SIZE) / GRID_SIZE; // y
     particleStateArray[i + 2] = Math.random() * 0.1 - 0.05; // vx
     particleStateArray[i + 3] = Math.random() * 0.1 - 0.05; // vy
 }
