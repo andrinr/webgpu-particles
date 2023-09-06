@@ -1,30 +1,42 @@
-@binding(0) @group(0) var<storage, read> size: vec2<u32>;
-@binding(1) @group(0) var<storage, read> current: array<u32>;
-@binding(2) @group(0) var<storage, read_write> next: array<u32>;
+@group(0) @binding(0) var<uniform> grid: vec2f;
 
-override blockSize = 8;
+@group(0) @binding(1) var<storage> cellStateIn: array<u32>;
+@group(0) @binding(2) var<storage, read_write> cellStateOut: array<u32>;
 
-fn getIndex(x: u32, y: u32) -> u32 {
-  let h = size.y;
-  let w = size.x;
-
-  return (y % h) * w + (x % w);
+fn cellIndex(cell: vec2u) -> u32 {
+  return (cell.y % u32(grid.y)) * u32(grid.x) +
+          (cell.x % u32(grid.x));
 }
 
-fn getCell(x: u32, y: u32) -> u32 {
-  return current[getIndex(x, y)];
+fn cellActive(x: u32, y: u32) -> u32 {
+  return cellStateIn[cellIndex(vec2(x, y))];
 }
 
-fn countNeighbors(x: u32, y: u32) -> u32 {
-  return getCell(x - 1, y - 1) + getCell(x, y - 1) + getCell(x + 1, y - 1) + 
-         getCell(x - 1, y) +                         getCell(x + 1, y) + 
-         getCell(x - 1, y + 1) + getCell(x, y + 1) + getCell(x + 1, y + 1);
-}
+@compute @workgroup_size(8, 8)
+fn main(@builtin(global_invocation_id) cell: vec3u) {
+  // Determine how many active neighbors this cell has.
+  let activeNeighbors = 
+    cellActive(cell.x+1, cell.y+1) +
+    cellActive(cell.x+1, cell.y) +
+    cellActive(cell.x+1, cell.y-1) +
+    cellActive(cell.x, cell.y-1) +
+    cellActive(cell.x-1, cell.y-1) +
+    cellActive(cell.x-1, cell.y) +
+    cellActive(cell.x-1, cell.y+1) +
+    cellActive(cell.x, cell.y+1);
 
-@compute @workgroup_size(blockSize, blockSize)
-fn main(@builtin(global_invocation_id) grid: vec3<u32>) {
-  let x = grid.x;
-  let y = grid.y;
-  let n = countNeighbors(x, y);
-  next[getIndex(x, y)] = select(u32(n == 3u), u32(n == 2u || n == 3u), getCell(x, y) == 1u); 
-} 
+  let i = cellIndex(cell.xy);
+
+  // Conway's game of life rules:
+  switch activeNeighbors {
+    case 2: {
+      cellStateOut[i] = cellStateIn[i];
+    }
+    case 3: {
+      cellStateOut[i] = 1;
+    }
+    default: {
+      cellStateOut[i] = 0;
+    }
+  }
+}

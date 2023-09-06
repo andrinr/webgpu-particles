@@ -1,16 +1,31 @@
-struct Out {
-  @builtin(position) pos: vec4<f32>,
-  @location(0) cell: f32,
-}
+struct VertexInput {
+  @location(0) pos: vec2f,
+  @builtin(instance_index) instance: u32,
+};
 
-@binding(0) @group(0) var<uniform> size: vec2<u32>;
+struct VertexOutput {
+  @builtin(position) pos: vec4f,
+  @location(0) cell: vec2f, // New line!
+};
+
+@group(0) @binding(0) var<uniform> grid: vec2f;
+@group(0) @binding(1) var<storage> cellState: array<u32>; // New!
 
 @vertex
-fn main(@builtin(instance_index) i: u32, @location(0) cell: u32, @location(1) pos: vec2<u32>) -> Out {
-  let w = size.x;
-  let h = size.y;
-  let x = (f32(i % w + pos.x) / f32(w) - 0.5) * 2. * f32(w) / f32(max(w, h));
-  let y = (f32((i - (i % w)) / w + pos.y) / f32(h) - 0.5) * 2. * f32(h) / f32(max(w, h));
+fn main(
+  @location(0) pos: vec2f,
+  @builtin(instance_index) instance: u32) -> VertexOutput {
+    
+  let i = f32(instance);
+  let cell = vec2f(i % grid.x, floor(i / grid.x));
+  let state = f32(cellState[instance]); // New line!
 
-  return Out(vec4<f32>(x, y, 0., 1.), f32(cell));
+  let cellOffset = cell / grid * 2;
+  // New: Scale the position by the cell's active state.
+  let gridPos = (pos*state+1) / grid - 1 + cellOffset;
+
+  var output: VertexOutput;
+  output.pos = vec4f(gridPos, 0, 1);
+  output.cell = cell;
+  return output;
 }
